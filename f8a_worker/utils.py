@@ -44,9 +44,9 @@ def get_package_dependents_count(ecosystem_backend, package, db_session=None):
 
     try:
         count = db_session.query(PackageGHUsage.count).filter(PackageGHUsage.name == package) \
-                          .filter(PackageGHUsage.ecosystem_backend == ecosystem_backend) \
-                          .order_by(desc(PackageGHUsage.timestamp)) \
-                          .first()
+            .filter(PackageGHUsage.ecosystem_backend == ecosystem_backend) \
+            .order_by(desc(PackageGHUsage.timestamp)) \
+            .first()
     except SQLAlchemyError:
         db_session.rollback()
         raise
@@ -71,11 +71,11 @@ def get_dependents_count(ecosystem_backend, package, version, db_session=None):
 
     try:
         count = db_session.query(ComponentGHUsage.count) \
-                          .filter(ComponentGHUsage.name == package) \
-                          .filter(ComponentGHUsage.version == version) \
-                          .filter(ComponentGHUsage.ecosystem_backend == ecosystem_backend) \
-                          .order_by(desc(ComponentGHUsage.timestamp)) \
-                          .first()
+            .filter(ComponentGHUsage.name == package) \
+            .filter(ComponentGHUsage.version == version) \
+            .filter(ComponentGHUsage.ecosystem_backend == ecosystem_backend) \
+            .order_by(desc(ComponentGHUsage.timestamp)) \
+            .first()
     except SQLAlchemyError:
         db_session.rollback()
         raise
@@ -92,11 +92,11 @@ def get_latest_analysis(ecosystem, package, version, db_session=None):
         db_session = storage.session
 
     try:
-        return db_session.query(Analysis).\
-            filter(Ecosystem.name == ecosystem).\
-            filter(Package.name == package).\
-            filter(Version.identifier == version).\
-            order_by(Analysis.started_at.desc()).\
+        return db_session.query(Analysis). \
+            filter(Ecosystem.name == ecosystem). \
+            filter(Package.name == package). \
+            filter(Version.identifier == version). \
+            order_by(Analysis.started_at.desc()). \
             first()
     except SQLAlchemyError:
         db_session.rollback()
@@ -659,8 +659,17 @@ def get_response(url, headers=None, sleep_time=2, retry_count=10):
 def add_maven_coords_to_set(coordinates_str, gav_set):
     """Add Maven coordinates to the gav_set set."""
     artifact_coords = MavenCoordinates.from_str(coordinates_str)
-    gav_set.add("{group_id}:{artifact_id}:{version}".format(
+    gav_set.add("{ecosystem}:{group_id}:{artifact_id}:{version}".format(
+        ecosystem="maven",
         group_id=artifact_coords.groupId,
         artifact_id=artifact_coords.artifactId,
         version=artifact_coords.version
     ))
+
+
+def peek(iterable):
+    try:
+        first = next(iterable)
+    except StopIteration:
+        return None
+    return first

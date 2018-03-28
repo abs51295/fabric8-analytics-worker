@@ -64,19 +64,32 @@ class ReportGenerationTask(BaseTask):
         except ValueError:
             self.log.error("Unexpected ValueError while selecting latest version!")
             latest_version = ''
-        package_data.update({"latest_version": latest_version})
+
+        # Remove latest_version as of now
+        # package_data.update({"latest_version": latest_version})
         self.log.debug("Parsed package data is: {}".format(package_data))
         return package_data
 
-    def _get_dependency_data(self, dependencies, ecosystem):
+    def _get_dependency_data(self, dependencies):
         dependency_data_list = list()
         self.log.debug("Dependencies are: {}".format(dependencies))
         for dependency in dependencies:
             self.log.info("Analyzing dependency: {}".format(dependency))
-            artifact_coords = MavenCoordinates.from_str(dependency)
+            n_colons = dependency.count(":")
+            dependency_list = dependency.split(":")
+            ecosystem = dependency_list[0]
+            version = dependency_list[-1]
+            if n_colons == 3:
+                name = dependency_list[1] + ":" + dependency_list[2]
+            elif n_colons == 2:
+                name = dependency_list[1]
+            else:
+                self.log.error("No valid dependency format found: {}"
+                               .format(dependency))
+                name = ""
+
             qstring = ("g.V().has('pecosystem','" + ecosystem + "').has('pname','" +
-                       artifact_coords.groupId + ":" + artifact_coords.artifactId + "')"
-                       ".has('version','" + artifact_coords.version + "').")
+                       name + "')"".has('version','" + version + "').")
             qstring += ("as('version').in('has_version').as('package').dedup()." +
                         "select('version','package').by(valueMap());")
             payload = {'gremlin': qstring}
@@ -114,8 +127,7 @@ class ReportGenerationTask(BaseTask):
         self._strict_assert(arguments.get('github_repo'))
         resolved_dependencies = arguments.get('dependencies')
         self.log.debug("Resolved dependencies are: {}".format(resolved_dependencies))
-        dependency_list = self._get_dependency_data(dependencies=resolved_dependencies,
-                                                    ecosystem="maven")
+        dependency_list = self._get_dependency_data(dependencies=resolved_dependencies)
         self.log.debug("Result returned by Report Generation task is: {}".format(dependency_list))
         arguments.update({"external_request_id": arguments.get('github_sha')})
         return {"dependencies": dependency_list, "git_url": arguments.get('github_repo'),

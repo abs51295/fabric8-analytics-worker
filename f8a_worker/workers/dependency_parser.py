@@ -2,17 +2,19 @@
 
 from f8a_worker.base import BaseTask
 from f8a_worker.errors import TaskError
-from f8a_worker.utils import TimedCommand, cwd, add_maven_coords_to_set
+from f8a_worker.utils import TimedCommand, cwd, add_maven_coords_to_set, peek
 from f8a_worker.process import Git
 from tempfile import TemporaryDirectory
 from pathlib import Path
 import re
 
+from f8a_worker.workers.mercator import MercatorTask
+
 
 class GithubDependencyTreeTask(BaseTask):
     """Finds out direct and indirect dependencies from a given github repository."""
 
-    _analysis_name = 'dependency_tree'
+    _mercator = MercatorTask.create_test_instance(task_name='GithubDependencyTreeTask')
 
     def execute(self, arguments=None):
         """Task code.
@@ -39,18 +41,28 @@ class GithubDependencyTreeTask(BaseTask):
             repo = Git.clone(url=github_repo, path=workdir, timeout=3600)
             repo.reset(revision=github_sha, hard=True)
             with cwd(repo.repo_path):
-                output_file = Path.cwd() / "dependency-tree.txt"
-                cmd = ["mvn", "org.apache.maven.plugins:maven-dependency-plugin:3.0.2:tree",
-                       "-DoutputType=dot",
-                       "-DoutputFile={filename}".format(filename=output_file),
-                       "-DappendOutput=true"]
-                timed_cmd = TimedCommand(cmd)
-                status, output, _ = timed_cmd.run(timeout=3600)
-                if status != 0 or not output_file.is_file():
-                    # all errors are in stdout, not stderr
-                    raise TaskError(output)
-                with output_file.open() as f:
-                    return GithubDependencyTreeTask.parse_maven_dependency_tree(f.readlines())
+                if peek(Path.cwd().glob("pom.xml")):
+                    return GithubDependencyTreeTask.get_maven_dependencies()
+                elif peek(Path.cwd().glob("npm-shrinkwrap.json")) \
+                        or peek(Path.cwd().glob("package.json")):
+                    return GithubDependencyTreeTask.get_npm_dependencies(repo.repo_path)
+                else:
+                    raise TaskError("Please provide maven or npm repo")
+
+    @staticmethod
+    def get_maven_dependencies():
+        output_file = Path.cwd() / "dependency-tree.txt"
+        cmd = ["mvn", "org.apache.maven.plugins:maven-dependency-plugin:3.0.2:tree",
+               "-DoutputType=dot",
+               "-DoutputFile={filename}".format(filename=output_file),
+               "-DappendOutput=true"]
+        timed_cmd = TimedCommand(cmd)
+        status, output, _ = timed_cmd.run(timeout=3600)
+        if status != 0 or not output_file.is_file():
+            # all errors are in stdout, not stderr
+            raise TaskError(output)
+        with output_file.open() as f:
+            return GithubDependencyTreeTask.parse_maven_dependency_tree(f.readlines())
 
     @staticmethod
     def parse_maven_dependency_tree(dependency_tree):
@@ -77,3 +89,45 @@ class GithubDependencyTreeTask(BaseTask):
 
         # Remove pom names from actual package names.
         return set_package_names.difference(set_pom_names)
+
+    @classmethod
+    def get_npm_dependencies(cls, path):
+        mercator_output = cls._mercator.run_mercator(arguments={"ecosystem": "npm"}, cache_path=path,
+                                                     resolve_poms=False)
+        set_package_names = set()
+        mercator_output_details = mercator_output['details'][0]
+        dependency_tree_lock = mercator_output_details \
+            .get('_dependency_tree_lock')
+
+        # Check if there is lock file present
+        if dependency_tree_lock:
+            dependencies = dependency_tree_lock.get('dependencies')
+
+            for dependency in dependencies:
+                transitive_deps = dependency.get('dependencies')
+                name = dependency.get('name')
+                version = dependency.get('version')
+                dev_dependency = dependency.get('dev')
+                print("Dev Dependency: {}".format(dev_dependency))
+                if not dev_dependency:
+                    set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="npm",
+                                                                                   package=name, version=version))
+
+                if transitive_deps:
+                    t_dep = transitive_deps[0]
+                    name = t_dep.get('name')
+                    version = t_dep.get('version')
+                    dev_dependency = dependency.get('dev')
+                    print("Dev Dependency: {}".format(dev_dependency))
+                    if not dev_dependency:
+                        set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="npm",
+                                                                                       package=name, version=version))
+        else:
+            all_dependencies = mercator_output_details.get('dependencies', [])
+            for dependency in all_dependencies:
+                split_dependency = dependency.split()
+                set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="npm",
+                                                                               package=split_dependency[0],
+                                                                               version=split_dependency[1]))
+
+        return set_package_names
