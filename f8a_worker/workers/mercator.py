@@ -108,17 +108,17 @@ class MercatorTask(BaseTask):
                     requirements_txt = item
 
         if pkg_info:
-            self.log.info('Found PKG-INFO at {p}'.format(p=pkg_info['path']))
+            print('Found PKG-INFO at {p}'.format(p=pkg_info['path']))
         if metadata_json:
-            self.log.info('Found metadata.json at {p}'.format(p=metadata_json['path']))
+            print('Found metadata.json at {p}'.format(p=metadata_json['path']))
         if requirements_txt:
-            self.log.info('Found requirements.txt at {p}'.format(p=requirements_txt['path']))
+            print('Found requirements.txt at {p}'.format(p=requirements_txt['path']))
 
         ret = None
         # figure out if this was packaged as wheel => metadata.json would
         #  have depth of topdir + 2
         if metadata_json and get_depth(metadata_json['path']) == get_depth(topdir) + 2:
-            self.log.info('Seems like this is wheel, using metadata.json ...')
+            print('Seems like this is wheel, using metadata.json ...')
             ret = metadata_json
         # figure out if this was packaged as sdist => PKG_INFO would
         #  have depth of topdir + 3 (e.g. requests-2.18.1/requests.egg-info/PKG-INFO)
@@ -127,30 +127,31 @@ class MercatorTask(BaseTask):
         #  (and perhaps there are requires.txt or requirements.txt that we could use)
         # NOTE: for now, we always treat requirements.txt as requires_dist
         elif pkg_info and get_depth(pkg_info['path']) <= get_depth(topdir) + 5:
-            self.log.info('Seems like this is sdist or egg, using PKG-INFO ...')
+            print('Seems like this is sdist or egg, using PKG-INFO ...')
             requires_dist = []
             # in well-made sdists, there are requires.txt next to PKG_INFO
             #  (this is something different that requirements.txt)
             #  TODO: maybe mercator could do this in future
             requires = os.path.join(os.path.dirname(pkg_info['path']), 'requires.txt')
             if os.path.exists(requires):
-                self.log.info('Found a "requires.txt" file next to PKG-INFO, going to use it ...')
+                print('Found a "requires.txt" file next to PKG-INFO, going to use it ...')
                 requires_dist = self._parse_requires_txt(requires)
             elif requirements_txt:
-                self.log.info('No "requires.txt" file found next to PKG-INFO, but requirements.txt'
-                              ' found, going to use it')
+                print('No "requires.txt" file found next to PKG-INFO, but requirements.txt'
+                      ' found, going to use it')
                 # if requires.txt can't be found, try requirements.txt
                 requires_dist = requirements_txt['result']['dependencies']
             else:
-                self.log.info('Found no usable source of requirements for PKG-INFO :(')
+                print('Found no usable source of requirements for PKG-INFO :(')
             pkg_info['result']['requires_dist'] = requires_dist
             ret = pkg_info
         elif requirements_txt:
-            self.log.info('Only requirements.txt found, going to use it ...')
+            print('Only requirements.txt found, going to use it ...')
             requirements_txt['result']['requires_dist'] = \
                 requirements_txt['result'].get('dependencies')
             ret = requirements_txt
 
+        print("Returning from _merge_python_items: {}".format(ret))
         return ret
 
     def execute(self, arguments):
@@ -245,6 +246,7 @@ class MercatorTask(BaseTask):
                                               version=arguments.get('version'),
                                               timeout=timeout)
 
+        print("Items from mercator: {}".format(items))
         result_data['details'] = [self._data_normalizer.handle_data(d, keep_path=keep_path)
                                   for d in items]
         result_data['status'] = 'success'

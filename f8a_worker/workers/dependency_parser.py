@@ -46,6 +46,8 @@ class GithubDependencyTreeTask(BaseTask):
                 elif peek(Path.cwd().glob("npm-shrinkwrap.json")) \
                         or peek(Path.cwd().glob("package.json")):
                     return GithubDependencyTreeTask.get_npm_dependencies(repo.repo_path)
+                elif peek(Path.cwd().glob("requirements.txt")):
+                    return GithubDependencyTreeTask.get_python_dependencies(repo.repo_path)
                 else:
                     raise TaskError("Please provide maven or npm repo")
 
@@ -108,7 +110,6 @@ class GithubDependencyTreeTask(BaseTask):
                 name = dependency.get('name')
                 version = dependency.get('version')
                 dev_dependency = dependency.get('dev')
-                print("Dev Dependency: {}".format(dev_dependency))
                 if not dev_dependency:
                     set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="npm",
                                                                                    package=name, version=version))
@@ -118,16 +119,31 @@ class GithubDependencyTreeTask(BaseTask):
                     name = t_dep.get('name')
                     version = t_dep.get('version')
                     dev_dependency = dependency.get('dev')
-                    print("Dev Dependency: {}".format(dev_dependency))
                     if not dev_dependency:
                         set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="npm",
                                                                                        package=name, version=version))
         else:
             all_dependencies = mercator_output_details.get('dependencies', [])
             for dependency in all_dependencies:
-                split_dependency = dependency.split()
+                name, version = dependency.split()
                 set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="npm",
-                                                                               package=split_dependency[0],
-                                                                               version=split_dependency[1]))
+                                                                               package=name,
+                                                                               version=version))
 
+        return set_package_names
+
+    @classmethod
+    def get_python_dependencies(cls, path):
+        mercator_output = cls._mercator.run_mercator(arguments={"ecosystem": "pypi"}, cache_path=path,
+                                                     resolve_poms=False)
+
+        print("Mercator output for Python: {}".format(mercator_output))
+        set_package_names = set()
+        mercator_output_details = mercator_output['details'][0]
+        dependencies = mercator_output_details.get('dependencies')
+        for dependency in dependencies:
+            name, version = dependency.split("==")
+            set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="pypi",
+                                                                           package=name,
+                                                                           version=version))
         return set_package_names
