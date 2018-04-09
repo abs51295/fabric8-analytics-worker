@@ -48,6 +48,8 @@ class GithubDependencyTreeTask(BaseTask):
                     return GithubDependencyTreeTask.get_npm_dependencies(repo.repo_path)
                 elif peek(Path.cwd().glob("requirements.txt")):
                     return GithubDependencyTreeTask.get_python_dependencies(repo.repo_path)
+                elif peek(Path.cwd().glob("glide.lock")):
+                    return GithubDependencyTreeTask.get_go_dependencies(repo.repo_path)
                 else:
                     raise TaskError("Please provide maven or npm repo")
 
@@ -137,7 +139,6 @@ class GithubDependencyTreeTask(BaseTask):
         mercator_output = cls._mercator.run_mercator(arguments={"ecosystem": "pypi"}, cache_path=path,
                                                      resolve_poms=False)
 
-        print("Mercator output for Python: {}".format(mercator_output))
         set_package_names = set()
         mercator_output_details = mercator_output['details'][0]
         dependencies = mercator_output_details.get('dependencies')
@@ -146,4 +147,39 @@ class GithubDependencyTreeTask(BaseTask):
             set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="pypi",
                                                                            package=name,
                                                                            version=version))
+        return set_package_names
+
+    @classmethod
+    def get_go_dependencies(cls, path):
+        mercator_output = cls._mercator.run_mercator(arguments={"ecosystem": "go"}, cache_path=path,
+                                                     resolve_poms=False)
+
+        set_package_names = set()
+
+        mercator_output_details = mercator_output['details'][0]
+        dependency_tree_lock = mercator_output_details \
+            .get('_dependency_tree_lock')
+
+        # Check if there is lock file present
+        if dependency_tree_lock:
+            dependencies = dependency_tree_lock.get('dependencies')
+
+            for dependency in dependencies:
+                sub_packages = dependency.get('subpackages')
+                name = dependency.get('name')
+                version = dependency.get('version')
+
+                if sub_packages:
+                    for sub_package in sub_packages:
+                        sub_package_name = name + '/{}'.format(sub_package)
+                        set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="go",
+                                                                                       package=sub_package_name,
+                                                                                       version=version))
+                else:
+                    set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="go",
+                                                                                   package=name, version=version))
+
+        else:
+            raise TaskError("Please have a lock file for Go ecosystem, since we need versions")
+
         return set_package_names

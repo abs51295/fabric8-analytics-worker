@@ -118,7 +118,7 @@ class MercatorTask(BaseTask):
         # figure out if this was packaged as wheel => metadata.json would
         #  have depth of topdir + 2
         if metadata_json and get_depth(metadata_json['path']) == get_depth(topdir) + 2:
-            print('Seems like this is wheel, using metadata.json ...')
+            self.log.debug('Seems like this is wheel, using metadata.json ...')
             ret = metadata_json
         # figure out if this was packaged as sdist => PKG_INFO would
         #  have depth of topdir + 3 (e.g. requests-2.18.1/requests.egg-info/PKG-INFO)
@@ -151,7 +151,6 @@ class MercatorTask(BaseTask):
                 requirements_txt['result'].get('dependencies')
             ret = requirements_txt
 
-        print("Returning from _merge_python_items: {}".format(ret))
         return ret
 
     def execute(self, arguments):
@@ -246,7 +245,6 @@ class MercatorTask(BaseTask):
                                               version=arguments.get('version'),
                                               timeout=timeout)
 
-        print("Items from mercator: {}".format(items))
         result_data['details'] = [self._data_normalizer.handle_data(d, keep_path=keep_path)
                                   for d in items]
         result_data['status'] = 'success'
