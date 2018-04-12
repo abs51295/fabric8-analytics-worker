@@ -7,6 +7,7 @@ from f8a_worker.process import Git
 from tempfile import TemporaryDirectory
 from pathlib import Path
 import re
+import anymarkup
 
 from f8a_worker.workers.mercator import MercatorTask
 
@@ -49,7 +50,9 @@ class GithubDependencyTreeTask(BaseTask):
                 elif peek(Path.cwd().glob("requirements.txt")):
                     return GithubDependencyTreeTask.get_python_dependencies(repo.repo_path)
                 elif peek(Path.cwd().glob("glide.lock")):
-                    return GithubDependencyTreeTask.get_go_dependencies(repo.repo_path)
+                    return GithubDependencyTreeTask.get_go_glide_dependencies(repo.repo_path)
+                elif peek(Path.cwd().glob("Gopkg.lock")):
+                    return GithubDependencyTreeTask.get_go_pkg_dependencies()
                 else:
                     raise TaskError("Please provide maven or npm repo")
 
@@ -150,7 +153,7 @@ class GithubDependencyTreeTask(BaseTask):
         return set_package_names
 
     @classmethod
-    def get_go_dependencies(cls, path):
+    def get_go_glide_dependencies(cls, path):
         mercator_output = cls._mercator.run_mercator(arguments={"ecosystem": "go"}, cache_path=path,
                                                      resolve_poms=False)
 
@@ -181,5 +184,32 @@ class GithubDependencyTreeTask(BaseTask):
 
         else:
             raise TaskError("Please have a lock file for Go ecosystem, since we need versions")
+
+        return set_package_names
+
+    @staticmethod
+    def get_go_pkg_dependencies():
+        # TODO: Run mercator instead of this custom parsing logic, once mercator supports this.
+        set_package_names = set()
+        lock_file_contents = anymarkup.parse_file('Gopkg.lock', format='toml')
+        packages = lock_file_contents.get('projects')
+        for package in packages:
+            name = package.get('name')
+            sub_packages = package.get('packages')
+            version = package.get('revision')
+
+            if sub_packages:
+                for sub_package in sub_packages:
+                    if "." not in sub_package:
+                        sub_package_name = name + '/{}'.format(sub_package)
+                        set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="go",
+                                                                                       package=sub_package_name,
+                                                                                       version=version))
+                    else:
+                        set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="go",
+                                                                                       package=name, version=version))
+            else:
+                set_package_names.add("{ecosystem}:{package}:{version}".format(ecosystem="go",
+                                                                               package=name, version=version))
 
         return set_package_names
