@@ -85,9 +85,12 @@ class MercatorTask(BaseTask):
         else:
             if outermost_only:
                 # process only root level manifests (or the ones closest to the root level)
+                print("In outermost only", data)
                 items = self._data_normalizer.get_outermost_items(data.get('items') or [])
             else:
+                print("Data: ", data)
                 items = data.get('items') or []
+                print("Items: ", items)
             self.log.debug('mercator found %i projects, outermost %i',
                            len(data), len(items))
 
@@ -96,6 +99,8 @@ class MercatorTask(BaseTask):
                 #  source of information and don't want to duplicate info by including
                 #  data from pom included in artifact (assuming it's included)
                 items = [d for d in items if d['ecosystem'].lower() == 'java-pom']
+                print("Ecosystem is backed by maven")
+                print("Modified items: ", items)
             elif ecosystem_object.is_backed_by(EcosystemBackend.npm):
                 # ignore other metadata files, e.g. requirements.txt
                 items = [d for d in items if d['ecosystem'].lower() == 'npm']
@@ -110,6 +115,7 @@ class MercatorTask(BaseTask):
 
         result_data['details'] = [self._data_normalizer.handle_data(d, keep_path=keep_path)
                                   for d in items]
+        print("Normalized data: ", result_data['details'])
         result_data['status'] = 'success'
         return result_data
 
